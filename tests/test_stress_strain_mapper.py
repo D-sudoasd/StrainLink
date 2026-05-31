@@ -15,6 +15,28 @@ SPEC.loader.exec_module(mapper)
 
 
 class StressStrainMapperNumericsTest(unittest.TestCase):
+    def test_publication_export_presets_cover_bitmap_and_vector_outputs(self):
+        self.assertEqual(mapper.DEFAULT_PLOT_PRESET, "Publication")
+        for name in [
+            "Raw inspection",
+            "Single-column figure",
+            "Double-column figure",
+            "Presentation",
+            "Publication",
+        ]:
+            self.assertIn(name, mapper.PLOT_EXPORT_PRESETS)
+            preset = mapper.PLOT_EXPORT_PRESETS[name]
+            self.assertGreaterEqual(preset["dpi"], 300)
+            self.assertEqual(len(preset["figsize"]), 2)
+            self.assertGreater(preset["font_size"], 0)
+
+        png_kwargs = mapper.StressStrainMapperApp._savefig_kwargs("figure.png", mapper.PLOT_EXPORT_PRESETS["Publication"])
+        pdf_kwargs = mapper.StressStrainMapperApp._savefig_kwargs("figure.pdf", mapper.PLOT_EXPORT_PRESETS["Publication"])
+
+        self.assertEqual(png_kwargs["dpi"], 600)
+        self.assertNotIn("dpi", pdf_kwargs)
+        self.assertEqual(png_kwargs["bbox_inches"], "tight")
+
     def test_zero_to_first_finite_uses_first_valid_value_and_preserves_nan(self):
         zeroed, offset = mapper.zero_to_first_finite([np.nan, 2.5, 3.0, np.nan, 1.0])
 

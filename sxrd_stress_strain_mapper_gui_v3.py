@@ -46,8 +46,19 @@ from tkinter import ttk, filedialog, messagebox
 
 import matplotlib
 matplotlib.use("TkAgg")
+matplotlib.rcParams.update(
+    {
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans", "Microsoft YaHei", "SimHei"],
+        "axes.unicode_minus": False,
+        "pdf.fonttype": 42,
+        "ps.fonttype": 42,
+        "svg.fonttype": "none",
+    }
+)
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from matplotlib.ticker import AutoMinorLocator, MaxNLocator
 
 try:
     from scipy.interpolate import PchipInterpolator
@@ -93,6 +104,87 @@ ALIGNMENT_FACTOR_WARN_MAX = 2.0
 
 CONTROL_PANEL_WIDTH = 430
 CONTROL_WRAP = 320
+
+DEFAULT_PLOT_PRESET = "Publication"
+PLOT_EXPORT_PRESETS = {
+    "Raw inspection": {
+        "description": "软件内快速检查：字号较小，导出 300 dpi。",
+        "figsize": (8.6, 5.2),
+        "dpi": 300,
+        "font_size": 9,
+        "title_size": 10,
+        "legend_size": 8,
+        "line_width": 1.4,
+        "marker_size": 3.6,
+        "scatter_size": 30,
+        "axis_width": 0.8,
+        "grid": True,
+    },
+    "Single-column figure": {
+        "description": "论文单栏：约 89 mm 宽，600 dpi。",
+        "figsize": (3.5, 3.0),
+        "dpi": 600,
+        "font_size": 8,
+        "title_size": 9,
+        "legend_size": 7,
+        "line_width": 1.0,
+        "marker_size": 2.8,
+        "scatter_size": 22,
+        "axis_width": 0.7,
+        "grid": False,
+    },
+    "Double-column figure": {
+        "description": "论文双栏：约 180 mm 宽，600 dpi。",
+        "figsize": (7.1, 4.6),
+        "dpi": 600,
+        "font_size": 9,
+        "title_size": 10,
+        "legend_size": 8,
+        "line_width": 1.2,
+        "marker_size": 3.2,
+        "scatter_size": 28,
+        "axis_width": 0.8,
+        "grid": False,
+    },
+    "Presentation": {
+        "description": "汇报 PPT：字号和线宽更大，300 dpi。",
+        "figsize": (10.0, 5.8),
+        "dpi": 300,
+        "font_size": 12,
+        "title_size": 13,
+        "legend_size": 10,
+        "line_width": 2.0,
+        "marker_size": 5.0,
+        "scatter_size": 45,
+        "axis_width": 1.0,
+        "grid": True,
+    },
+    "Publication": {
+        "description": "论文级默认：低饱和度配色、600 dpi、紧凑留白。",
+        "figsize": (7.1, 4.8),
+        "dpi": 600,
+        "font_size": 9,
+        "title_size": 10,
+        "legend_size": 8,
+        "line_width": 1.25,
+        "marker_size": 3.2,
+        "scatter_size": 30,
+        "axis_width": 0.8,
+        "grid": False,
+    },
+}
+
+PLOT_COLORS = {
+    "reference": "#1f2937",
+    "mapped": "#b45309",
+    "stress": "#2563eb",
+    "strain": "#047857",
+    "smooth": "#0f766e",
+    "invalid": "#7c3aed",
+    "axis": "#334155",
+    "spine": "#475569",
+    "grid": "#d7dee8",
+}
 
 
 # -----------------------------
@@ -734,6 +826,47 @@ def build_inverse_branch_with_diagnostics(
 # GUI application
 # -----------------------------
 
+class ToolTip:
+    """Small ttk-compatible tooltip without adding a GUI dependency."""
+
+    def __init__(self, widget, text: str, wraplength: int = 360):
+        self.widget = widget
+        self.text = text
+        self.wraplength = wraplength
+        self.window = None
+        widget.bind("<Enter>", self._show, add="+")
+        widget.bind("<Leave>", self._hide, add="+")
+        widget.bind("<ButtonPress>", self._hide, add="+")
+
+    def _show(self, _event=None):
+        if self.window is not None or not self.text:
+            return
+        x = self.widget.winfo_rootx() + 18
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 8
+        self.window = tk.Toplevel(self.widget)
+        self.window.wm_overrideredirect(True)
+        self.window.wm_geometry(f"+{x}+{y}")
+        label = tk.Label(
+            self.window,
+            text=self.text,
+            justify="left",
+            wraplength=self.wraplength,
+            background="#111827",
+            foreground="#f8fafc",
+            relief="solid",
+            borderwidth=1,
+            padx=8,
+            pady=5,
+            font=("TkDefaultFont", 9),
+        )
+        label.pack()
+
+    def _hide(self, _event=None):
+        if self.window is not None:
+            self.window.destroy()
+            self.window = None
+
+
 class StressStrainMapperApp:
     def __init__(self, root: tk.Tk):
         self.root = root
@@ -747,6 +880,8 @@ class StressStrainMapperApp:
         self.ref_path: Optional[str] = None
         self.station_path: Optional[str] = None
         self._mapping_running = False
+        self._tooltips = []
+        self._last_plot_ref_clean: Optional[pd.DataFrame] = None
 
         self._build_variables()
         self._build_layout()
@@ -777,6 +912,7 @@ class StressStrainMapperApp:
         self.show_smoothed = tk.BooleanVar(value=False)
         self.align_strain_max_to_reference = tk.BooleanVar(value=False)
         self.align_stress_max_to_reference = tk.BooleanVar(value=False)
+        self.plot_preset = tk.StringVar(value=DEFAULT_PLOT_PRESET)
 
         self.recommendation_confirmed = tk.BooleanVar(value=False)
         self.advanced_visible = tk.BooleanVar(value=False)
@@ -851,7 +987,11 @@ class StressStrainMapperApp:
         style.configure("BlueHint.TLabel", background="#ffffff", foreground="#1f5f85")
         style.configure("Primary.TButton", padding=(11, 8), font=("TkDefaultFont", 10, "bold"))
         style.configure("Secondary.TButton", padding=(8, 6))
+        style.configure("Export.TButton", padding=(10, 7), font=("TkDefaultFont", 10, "bold"))
+        style.configure("Danger.TButton", padding=(8, 6))
         style.configure("Tool.TCheckbutton", background="#ffffff", foreground="#1f2937")
+        style.configure("TCombobox", padding=(4, 3))
+        style.configure("TSpinbox", padding=(4, 3))
         style.configure("Workspace.TNotebook", background="#eef3f8", borderwidth=0, tabmargins=(4, 4, 4, 0))
         style.configure("Workspace.TNotebook.Tab", padding=(18, 8), font=("TkDefaultFont", 10, "bold"))
         style.map(
@@ -889,6 +1029,71 @@ class StressStrainMapperApp:
     def _grid_labeled(self, parent, row: int, label: str, widget, pady: int = 2):
         ttk.Label(parent, text=label, style="Control.TLabel", width=10).grid(row=row, column=0, sticky="w", pady=pady, padx=(0, 8))
         widget.grid(row=row, column=1, sticky="ew", pady=pady)
+
+    def _add_tooltip(self, widget, text: str):
+        self._tooltips.append(ToolTip(widget, text))
+        return widget
+
+    def _current_plot_preset(self) -> dict:
+        return PLOT_EXPORT_PRESETS.get(self.plot_preset.get(), PLOT_EXPORT_PRESETS[DEFAULT_PLOT_PRESET])
+
+    def _on_plot_preset_changed(self, *_):
+        preset = self._current_plot_preset()
+        self.log(f"绘图预设已切换为 {self.plot_preset.get()}：{preset['description']}")
+        if self.result_df is not None and self._last_plot_ref_clean is not None:
+            self._update_plot(self._last_plot_ref_clean, self.result_df)
+            self._set_result_status("绘图预设已修改，预览已刷新。", "#24527a")
+
+    def _apply_axis_style(self, axis, preset: dict, *, grid: Optional[bool] = None):
+        axis.set_facecolor("#ffffff")
+        axis.tick_params(
+            colors=PLOT_COLORS["axis"],
+            labelsize=preset["font_size"],
+            width=preset["axis_width"],
+            length=4,
+            direction="out",
+        )
+        axis.tick_params(which="minor", length=2, width=max(0.5, preset["axis_width"] * 0.7), direction="out")
+        axis.xaxis.label.set_color(PLOT_COLORS["axis"])
+        axis.yaxis.label.set_color(PLOT_COLORS["axis"])
+        axis.xaxis.label.set_size(preset["font_size"])
+        axis.yaxis.label.set_size(preset["font_size"])
+        axis.xaxis.set_major_locator(MaxNLocator(nbins=6, prune=None))
+        axis.yaxis.set_major_locator(MaxNLocator(nbins=6, prune=None))
+        try:
+            axis.xaxis.set_minor_locator(AutoMinorLocator(2))
+            axis.yaxis.set_minor_locator(AutoMinorLocator(2))
+        except Exception:
+            pass
+        for spine in axis.spines.values():
+            spine.set_color(PLOT_COLORS["spine"])
+            spine.set_linewidth(preset["axis_width"])
+        use_grid = preset["grid"] if grid is None else grid
+        if use_grid:
+            axis.grid(True, color=PLOT_COLORS["grid"], linewidth=0.55, alpha=0.75)
+        else:
+            axis.grid(False)
+
+    def _apply_figure_layout(self, *, for_export: bool = False):
+        preset = self._current_plot_preset()
+        if for_export:
+            self.fig.set_size_inches(*preset["figsize"], forward=True)
+        self.fig.patch.set_facecolor("#ffffff")
+        self.fig.align_labels()
+        self.fig.tight_layout(pad=1.2, h_pad=1.7)
+
+    @staticmethod
+    def _savefig_kwargs(path: str, preset: dict) -> dict:
+        suffix = Path(path).suffix.lower()
+        kwargs = {
+            "bbox_inches": "tight",
+            "pad_inches": 0.04,
+            "facecolor": "white",
+            "edgecolor": "none",
+        }
+        if suffix not in {".pdf", ".svg", ".eps"}:
+            kwargs["dpi"] = preset["dpi"]
+        return kwargs
 
     def _create_collapsible_section(self, parent, row: int, title: str, summary: str) -> ttk.Frame:
         container = ttk.Frame(parent, style="SectionBody.TFrame")
@@ -932,7 +1137,9 @@ class StressStrainMapperApp:
         ref_box.columnconfigure(1, weight=1)
         ttk.Label(ref_box, text="加载完整参考曲线，确认应变/应力列与单位。", style="Hint.TLabel", wraplength=CONTROL_WRAP).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
-        ttk.Button(ref_box, text="加载参考曲线 CSV/TXT/XLSX", command=self.load_reference, style="Secondary.TButton").grid(row=1, column=0, columnspan=2, sticky="ew")
+        self.load_reference_button = ttk.Button(ref_box, text="导入参考曲线 CSV/TXT/XLSX", command=self.load_reference, style="Secondary.TButton")
+        self.load_reference_button.grid(row=1, column=0, columnspan=2, sticky="ew")
+        self._add_tooltip(self.load_reference_button, "导入完整参考应力-应变曲线。程序只读取表格并推荐列和单位，不会修改原始文件。")
         self.ref_label = ttk.Label(ref_box, text="未加载", style="Hint.TLabel", wraplength=CONTROL_WRAP)
         self.ref_label.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 8))
         ttk.Label(ref_box, textvariable=self.ref_recommendation, style="BlueHint.TLabel", wraplength=CONTROL_WRAP).grid(row=3, column=0, columnspan=2, sticky="w", pady=(0, 8))
@@ -950,7 +1157,9 @@ class StressStrainMapperApp:
         st_box.columnconfigure(1, weight=1)
         ttk.Label(st_box, text="加载线站数据，检查推荐模式、编号和输入列。", style="Hint.TLabel", wraplength=CONTROL_WRAP).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
-        ttk.Button(st_box, text="加载线站数据 CSV/TXT/XLSX", command=self.load_station, style="Secondary.TButton").grid(row=1, column=0, columnspan=2, sticky="ew")
+        self.load_station_button = ttk.Button(st_box, text="导入线站数据 CSV/TXT/XLSX", command=self.load_station, style="Secondary.TButton")
+        self.load_station_button.grid(row=1, column=0, columnspan=2, sticky="ew")
+        self._add_tooltip(self.load_station_button, "导入每张谱线对应的应变、应力或二者兼有的数据表。程序会按列名和值域给出推荐。")
         self.station_label = ttk.Label(st_box, text="未加载", style="Hint.TLabel", wraplength=CONTROL_WRAP)
         self.station_label.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 8))
         ttk.Label(st_box, textvariable=self.station_recommendation, style="BlueHint.TLabel", wraplength=CONTROL_WRAP).grid(row=3, column=0, columnspan=2, sticky="w", pady=(0, 8))
@@ -974,8 +1183,9 @@ class StressStrainMapperApp:
 
         self.mode_hint = ttk.Label(st_box, text="", style="Hint.TLabel", wraplength=CONTROL_WRAP)
         self.mode_hint.grid(row=10, column=0, columnspan=2, sticky="w", pady=(5, 0))
-        self.confirm_button = ttk.Button(st_box, text="确认推荐", command=self.confirm_recommendations, style="Secondary.TButton")
+        self.confirm_button = ttk.Button(st_box, text="确认列与单位", command=self.confirm_recommendations, style="Secondary.TButton")
         self.confirm_button.grid(row=11, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        self._add_tooltip(self.confirm_button, "确认当前模式、列和单位选择。修改任何列或单位后，需要重新确认再运行。")
         for combo in [
             self.ref_strain_combo,
             self.ref_stress_combo,
@@ -991,17 +1201,31 @@ class StressStrainMapperApp:
         self._update_station_mode_hint()
 
         # Step 3: run, quality summary, export
-        result_box.columnconfigure(0, weight=1)
+        result_box.columnconfigure(0, weight=0)
+        result_box.columnconfigure(1, weight=1)
         self.result_status_label = ttk.Label(result_box, textvariable=self.result_status, style="BlueHint.TLabel", wraplength=CONTROL_WRAP)
-        self.result_status_label.grid(row=0, column=0, sticky="w", pady=(0, 4))
-        ttk.Label(result_box, textvariable=self.result_summary, style="Hint.TLabel", wraplength=CONTROL_WRAP).grid(row=1, column=0, sticky="w", pady=(0, 8))
+        self.result_status_label.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
+        ttk.Label(result_box, textvariable=self.result_summary, style="Hint.TLabel", wraplength=CONTROL_WRAP).grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
-        self.run_button = ttk.Button(result_box, text="运行映射 / 更新图", command=self.run_mapping, style="Primary.TButton")
-        self.run_button.grid(row=2, column=0, sticky="ew", pady=(2, 5))
+        self.run_button = ttk.Button(result_box, text="开始映射 / 更新图", command=self.run_mapping, style="Primary.TButton")
+        self.run_button.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(2, 5))
+        self._add_tooltip(self.run_button, "按当前列、单位和高级设置执行映射，并刷新曲线图、结果表和日志。")
         self.export_button = ttk.Button(result_box, text="导出结果 CSV/XLSX", command=self.export_result, style="Secondary.TButton")
-        self.export_button.grid(row=3, column=0, sticky="ew", pady=2)
-        self.save_plot_button = ttk.Button(result_box, text="保存当前图 PNG/PDF/SVG", command=self.save_plot, style="Secondary.TButton")
-        self.save_plot_button.grid(row=4, column=0, sticky="ew", pady=2)
+        self.export_button.grid(row=3, column=0, columnspan=2, sticky="ew", pady=2)
+        self._add_tooltip(self.export_button, "导出当前映射结果表。导出的列会优先放置谱线编号、应变和应力结果，原始列仍会保留。")
+        self.plot_preset_combo = ttk.Combobox(
+            result_box,
+            textvariable=self.plot_preset,
+            values=list(PLOT_EXPORT_PRESETS.keys()),
+            state="readonly",
+            width=22,
+        )
+        self._grid_labeled(result_box, 4, "出图预设", self.plot_preset_combo)
+        self.plot_preset_combo.bind("<<ComboboxSelected>>", self._on_plot_preset_changed)
+        self._add_tooltip(self.plot_preset_combo, "控制图像尺寸、dpi、字号、线宽、marker、图例和是否显示网格。Publication 为论文级默认。")
+        self.save_plot_button = ttk.Button(result_box, text="导出图像 PNG/TIFF/PDF/SVG/EPS", command=self.save_plot, style="Export.TButton")
+        self.save_plot_button.grid(row=5, column=0, columnspan=2, sticky="ew", pady=2)
+        self._add_tooltip(self.save_plot_button, "按当前出图预设导出高分辨率位图或矢量图；使用 tight bounding box 避免标签和图例被裁切。")
 
         ttk.Checkbutton(
             result_box,
@@ -1009,7 +1233,7 @@ class StressStrainMapperApp:
             variable=self.advanced_visible,
             command=self._toggle_advanced_settings,
             style="Tool.TCheckbutton",
-        ).grid(row=5, column=0, sticky="w", pady=(8, 4))
+        ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(8, 4))
 
         self.advanced_frame = ttk.LabelFrame(body, text="高级设置", style="Section.TLabelframe", padding=(8, 7))
         self.advanced_frame.columnconfigure(0, weight=1)
@@ -1173,6 +1397,11 @@ class StressStrainMapperApp:
         self.log_text.insert(tk.END, str(text) + "\n")
         self.log_text.see(tk.END)
 
+    def _log_exception(self, context: str, exc: Exception):
+        self.log(f"{context}：{exc}")
+        self.log("请检查文件路径、表头、所选列、单位和输出路径是否有效。下面是技术详情，便于追踪问题：")
+        self.log(traceback.format_exc())
+
     def _toggle_advanced_settings(self):
         if bool(self.advanced_visible.get()):
             self.advanced_frame.grid(row=3, column=0, sticky="ew", pady=(0, 8))
@@ -1197,6 +1426,7 @@ class StressStrainMapperApp:
         if self.ref_df is not None and self.station_df is not None:
             self.recommendation_confirmed.set(False)
             self.result_df = None
+            self._last_plot_ref_clean = None
             self._set_result_status("推荐已修改，请重新确认后再运行。", "#8a6d1d")
             self.result_summary.set("列、单位或模式已改变；旧结果已失效。")
             self._update_strain_alignment_hint()
@@ -1375,8 +1605,9 @@ class StressStrainMapperApp:
             return
         self.recommendation_confirmed.set(True)
         self.result_df = None
+        self._last_plot_ref_clean = None
         self._set_result_status("推荐已确认，可以运行映射。", "#2e7d32")
-        self.result_summary.set("点击“运行映射 / 更新图”后，程序会显示有效行数、超范围行数和导出按钮。")
+        self.result_summary.set("点击“开始映射 / 更新图”后，程序会显示有效行数、超范围行数和导出按钮。")
         self._update_wizard_state_display()
         if hasattr(self, "wizard"):
             self.wizard.select(2)
@@ -1418,6 +1649,7 @@ class StressStrainMapperApp:
             self.ref_df = df
             self.ref_path = path
             self.result_df = None
+            self._last_plot_ref_clean = None
             self.recommendation_confirmed.set(False)
             cols = list(df.columns)
             self.ref_strain_combo["values"] = cols
@@ -1440,7 +1672,7 @@ class StressStrainMapperApp:
                 self.wizard.select(1)
         except Exception as exc:
             messagebox.showerror("读取参考曲线失败", str(exc))
-            self.log(traceback.format_exc())
+            self._log_exception("读取参考曲线失败", exc)
 
     def load_station(self):
         path = filedialog.askopenfilename(
@@ -1454,6 +1686,7 @@ class StressStrainMapperApp:
             self.station_df = df
             self.station_path = path
             self.result_df = None
+            self._last_plot_ref_clean = None
             self.recommendation_confirmed.set(False)
             cols = list(df.columns)
             display_cols = [""] + cols
@@ -1479,7 +1712,7 @@ class StressStrainMapperApp:
             self._update_wizard_state_display()
         except Exception as exc:
             messagebox.showerror("读取线站数据失败", str(exc))
-            self.log(traceback.format_exc())
+            self._log_exception("读取线站数据失败", exc)
 
     def _prepare_reference(self) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame, dict]:
         if self.ref_df is None:
@@ -1553,6 +1786,7 @@ class StressStrainMapperApp:
 
     def _clear_result_preview(self):
         self.result_df = None
+        self._last_plot_ref_clean = None
         if hasattr(self, "tree"):
             for item in self.tree.get_children():
                 self.tree.delete(item)
@@ -1938,6 +2172,7 @@ class StressStrainMapperApp:
             result["mapping_is_valid"] = np.isfinite(result["mapped_strain_fraction"]) & np.isfinite(result["mapped_stress_MPa"])
             self._apply_smoothing_to_result(result)
             self.result_df = result
+            self._last_plot_ref_clean = ref_clean.copy()
             self._update_plot(ref_clean, result)
             self._update_table(result)
 
@@ -1970,7 +2205,7 @@ class StressStrainMapperApp:
             self.result_summary.set(str(exc))
             self._update_wizard_state_display()
             messagebox.showerror("映射失败", str(exc))
-            self.log(traceback.format_exc())
+            self._log_exception("映射失败", exc)
         finally:
             if started:
                 self._mapping_running = False
@@ -1996,6 +2231,7 @@ class StressStrainMapperApp:
 
 
     def _update_plot(self, ref_clean: pd.DataFrame, result: pd.DataFrame):
+        preset = self._current_plot_preset()
         self.fig.clear()
         self.fig.patch.set_facecolor("#ffffff")
         self.ax_curve = self.fig.add_subplot(211)
@@ -2011,9 +2247,9 @@ class StressStrainMapperApp:
         self.ax_curve.plot(
             ref_clean["strain_fraction"] * 100.0,
             ref_clean["stress_MPa"],
-            color="#1f2937",
-            linewidth=2.2,
-            alpha=0.85,
+            color=PLOT_COLORS["reference"],
+            linewidth=preset["line_width"] * 1.15,
+            alpha=0.92,
             label="Reference curve",
             zorder=1,
         )
@@ -2021,11 +2257,11 @@ class StressStrainMapperApp:
             self.ax_curve.scatter(
                 result.loc[valid, "mapped_strain_percent"],
                 result.loc[valid, "mapped_stress_MPa"],
-                s=34,
+                s=preset["scatter_size"],
                 marker="o",
                 facecolors="none",
-                edgecolors="#c2410c",
-                linewidths=1.25,
+                edgecolors=PLOT_COLORS["mapped"],
+                linewidths=preset["axis_width"] * 1.35,
                 label="Mapped raw points",
                 zorder=3,
             )
@@ -2034,8 +2270,8 @@ class StressStrainMapperApp:
             self.ax_curve.plot(
                 result.loc[smooth_ok, "smooth_mapped_strain_percent"],
                 result.loc[smooth_ok, "smooth_mapped_stress_MPa"],
-                color="#0f766e",
-                linewidth=2.0,
+                color=PLOT_COLORS["smooth"],
+                linewidth=preset["line_width"] * 1.1,
                 label="Smoothed guide",
                 zorder=2,
             )
@@ -2043,18 +2279,18 @@ class StressStrainMapperApp:
             self.ax_curve.scatter(
                 result.loc[invalid, "mapped_strain_percent"],
                 result.loc[invalid, "mapped_stress_MPa"],
-                s=40,
+                s=preset["scatter_size"] * 1.15,
                 marker="x",
-                color="#7c3aed",
+                color=PLOT_COLORS["invalid"],
+                linewidths=preset["axis_width"] * 1.2,
                 label="Invalid / out of range",
                 zorder=4,
             )
 
         self.ax_curve.set_xlabel("Engineering strain / %")
         self.ax_curve.set_ylabel("Engineering stress / MPa")
-        self.ax_curve.set_title("Reference curve + mapped in-situ points", fontsize=11, fontweight="bold", color="#0f172a")
-        self.ax_curve.grid(True, color="#d9e2ec", linewidth=0.8, alpha=0.85)
-        self.ax_curve.legend(loc="best", frameon=True, framealpha=0.92, fontsize=8)
+        self.ax_curve.set_title("Reference curve + mapped in-situ points", fontsize=preset["title_size"], color="#0f172a")
+        self.ax_curve.legend(loc="best", frameon=False, fontsize=preset["legend_size"], handlelength=2.0)
 
         # Unit sanity annotation: useful when percent/fraction is selected incorrectly.
         try:
@@ -2067,7 +2303,7 @@ class StressStrainMapperApp:
                     transform=self.ax_curve.transAxes,
                     va="top",
                     ha="left",
-                    fontsize=9,
+                    fontsize=preset["font_size"],
                     color="#b22222",
                     bbox=dict(boxstyle="round,pad=0.25", facecolor="white", edgecolor="#b22222", alpha=0.85),
                 )
@@ -2091,9 +2327,9 @@ class StressStrainMapperApp:
                 x,
                 result["mapped_stress_MPa"],
                 marker="o",
-                markersize=3.8,
-                linewidth=1.0,
-                color="#2563eb",
+                markersize=preset["marker_size"],
+                linewidth=preset["line_width"],
+                color=PLOT_COLORS["stress"],
                 alpha=0.85,
                 label="Stress raw / MPa",
             )
@@ -2101,13 +2337,12 @@ class StressStrainMapperApp:
             self.ax_series.plot(
                 x,
                 result["smooth_mapped_stress_MPa"],
-                linewidth=2.0,
-                color="#c2410c",
+                linewidth=preset["line_width"] * 1.1,
+                color=PLOT_COLORS["mapped"],
                 label="Stress smoothed / MPa",
             )
         self.ax_series.set_xlabel(xlabel)
         self.ax_series.set_ylabel("Stress / MPa")
-        self.ax_series.grid(True, color="#d9e2ec", linewidth=0.8, alpha=0.85)
 
         ax2 = self.ax_series.twinx()
         if use_raw:
@@ -2115,10 +2350,10 @@ class StressStrainMapperApp:
                 x,
                 result["mapped_strain_percent"],
                 marker="s",
-                markersize=3.4,
-                linewidth=1.0,
+                markersize=max(2.4, preset["marker_size"] * 0.9),
+                linewidth=preset["line_width"],
                 linestyle="--",
-                color="#047857",
+                color=PLOT_COLORS["strain"],
                 alpha=0.78,
                 label="Strain raw / %",
             )
@@ -2126,27 +2361,23 @@ class StressStrainMapperApp:
             ax2.plot(
                 x,
                 result["smooth_mapped_strain_percent"],
-                linewidth=1.8,
+                linewidth=preset["line_width"] * 1.05,
                 linestyle="--",
-                color="#0f766e",
+                color=PLOT_COLORS["smooth"],
                 label="Strain smoothed / %",
             )
         ax2.set_ylabel("Strain / %")
 
         lines1, labels1 = self.ax_series.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
-        self.ax_series.legend(lines1 + lines2, labels1 + labels2, loc="best", frameon=True, framealpha=0.92, fontsize=8)
-        self.ax_series.set_title("Mapped stress and strain vs spectrum/frame order", fontsize=11, fontweight="bold", color="#0f172a")
+        self.ax_series.legend(lines1 + lines2, labels1 + labels2, loc="best", frameon=False, fontsize=preset["legend_size"], handlelength=2.0)
+        self.ax_series.set_title("Mapped stress and strain vs spectrum/frame order", fontsize=preset["title_size"], color="#0f172a")
 
-        for axis in (self.ax_curve, self.ax_series, ax2):
-            axis.set_facecolor("#ffffff")
-            axis.tick_params(colors="#334155", labelsize=9)
-            axis.xaxis.label.set_color("#334155")
-            axis.yaxis.label.set_color("#334155")
-            for spine in axis.spines.values():
-                spine.set_color("#cbd5e1")
+        self._apply_axis_style(self.ax_curve, preset)
+        self._apply_axis_style(self.ax_series, preset)
+        self._apply_axis_style(ax2, preset, grid=False)
 
-        self.fig.tight_layout(pad=2.2, h_pad=2.4)
+        self._apply_figure_layout()
         self.canvas.draw()
 
     def _update_table(self, df: pd.DataFrame):
@@ -2260,26 +2491,43 @@ class StressStrainMapperApp:
             messagebox.showinfo("导出完成", f"已导出：\n{path}")
         except Exception as exc:
             messagebox.showerror("导出失败", str(exc))
-            self.log(traceback.format_exc())
+            self._log_exception("导出结果失败", exc)
 
     def save_plot(self):
         if self.result_df is None:
             messagebox.showwarning("没有图", "请先运行映射。")
             return
+        preset = self._current_plot_preset()
         path = filedialog.asksaveasfilename(
-            title="保存当前图",
+            title=f"保存当前图 - {self.plot_preset.get()}",
             defaultextension=".png",
-            filetypes=[("PNG", "*.png"), ("PDF", "*.pdf"), ("SVG", "*.svg")],
+            filetypes=[
+                ("PNG", "*.png"),
+                ("TIFF", "*.tif *.tiff"),
+                ("PDF", "*.pdf"),
+                ("SVG", "*.svg"),
+                ("EPS", "*.eps"),
+            ],
         )
         if not path:
             return
+        original_size = self.fig.get_size_inches().copy()
         try:
-            self.fig.savefig(path, dpi=300, bbox_inches="tight")
+            self._apply_figure_layout(for_export=True)
+            self.fig.savefig(path, **self._savefig_kwargs(path, preset))
             self.log(f"已保存图：{path}")
-            messagebox.showinfo("保存完成", f"已保存：\n{path}")
+            self.log(
+                f"导出预设：{self.plot_preset.get()}；尺寸 {preset['figsize'][0]} x {preset['figsize'][1]} inch；"
+                f"dpi {preset['dpi']}（矢量格式忽略 dpi）。"
+            )
+            messagebox.showinfo("保存完成", f"已保存：\n{path}\n\n预设：{self.plot_preset.get()}")
         except Exception as exc:
             messagebox.showerror("保存失败", str(exc))
-            self.log(traceback.format_exc())
+            self._log_exception("保存图像失败", exc)
+        finally:
+            self.fig.set_size_inches(*original_size, forward=True)
+            self._apply_figure_layout()
+            self.canvas.draw_idle()
 
 
 def main():
