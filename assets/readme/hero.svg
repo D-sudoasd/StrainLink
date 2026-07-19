@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-labelledby="title desc">
+  <title id="title">Stress–Strain Mapper</title>
+  <desc id="desc">Map missing stress or strain for in-situ SXRD tensile tables using a complete reference stress-strain curve.</desc>
+  <rect width="1200" height="320" rx="28" fill="#0f1419"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <text x="56" y="72" fill="#fb923c" font-size="18" font-weight="700" letter-spacing="2">IN-SITU SXRD · TENSILE TABLES</text>
+    <text x="56" y="128" fill="#f8fafc" font-size="42" font-weight="800">Stress–Strain Mapper</text>
+    <text x="56" y="174" fill="#94a3b8" font-size="20">Complete missing stress or strain from a reference curve.</text>
+    <text x="56" y="220" fill="#64748b" font-size="17">PCHIP (or linear) · unit checks · publication export presets</text>
+    <text x="56" y="270" fill="#78716c" font-size="15">Desktop Tk GUI · one spectrum/frame per table row</text>
+  </g>
+  <g transform="translate(720 48)">
+    <rect width="420" height="224" rx="16" fill="#111827" stroke="#9a3412" stroke-width="2"/>
+    <polyline points="40,180 80,170 120,150 160,120 200,95 240,80 280,72 320,68 360,66" fill="none" stroke="#fb923c" stroke-width="3"/>
+    <circle cx="160" cy="120" r="5" fill="#38bdf8"/>
+    <circle cx="240" cy="80" r="5" fill="#38bdf8"/>
+    <circle cx="300" cy="70" r="5" fill="#38bdf8"/>
+    <text x="40" y="40" fill="#94a3b8" font-family="ui-monospace, monospace" font-size="14">reference σ–ε</text>
+    <text x="40" y="210" fill="#64748b" font-family="ui-monospace, monospace" font-size="13">station: strain-only · stress-only · both</text>
+  </g>
+</svg>
