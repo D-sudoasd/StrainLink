@@ -4,41 +4,68 @@
 
 # Stress–Strain Mapper
 
-**Complete missing stress or strain for in-situ SXRD tensile tables using a reference curve.**
+**Complete missing stress or strain for in-situ SXRD tensile tables using a reference σ–ε curve.**
 
-Desktop Tk GUI (v3). Each table row is one spectrum / frame / acquisition. A complete lab reference σ–ε curve fills the missing column, converts units, checks alignment, and exports plots.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3%2B%20(tkinter)-green.svg)](https://www.python.org/downloads/)
+
+Desktop **Tk** GUI (v3). Each table row is one spectrum / frame / acquisition. A complete lab reference stress–strain curve fills the missing column, converts units, checks alignment, and exports publication-ready plots.
 
 <p align="center">
   <img src="assets/readme/section-01-map.svg" width="100%" alt="01 Map: reference curve fills station gaps.">
 </p>
 
+## Features
+
 | Station has… | Mapper does… |
 |--------------|--------------|
 | Strain only | Interpolate → stress |
 | Stress only | Inverse-interpolate → strain |
-| Both | Units · check · export |
+| Both | Units · alignment check · export |
 
-**PCHIP** when SciPy is available; otherwise linear. Optional smoothing guides. Publication export presets.
+- **PCHIP** shape-preserving interpolation when SciPy is available; otherwise linear fallback
+- Optional Savitzky–Golay / smoothing guides (SciPy signal)
+- Unit warnings (fraction vs percent strain; stress in MPa)
+- High-contrast plotting and publication export presets
+- Excel / CSV friendly table I/O via pandas + openpyxl
 
-<p align="center">
-  <img src="assets/readme/section-02-run.svg" width="100%" alt="02 Run: double-click the Windows launcher.">
-</p>
+## Install / Quick start
+
+Windows (double-click):
 
 ```text
 start_stress_strain_mapper.bat
 ```
+
+From source:
 
 ```powershell
 pip install pandas numpy matplotlib scipy openpyxl
 python sxrd_stress_strain_mapper_gui_v3.py
 ```
 
-Requires Python 3 with **tkinter**.
+Requires Python 3 with **tkinter** (standard on most Windows / macOS Python installs).
+
+## Usage
+
+1. Load a **complete** lab reference σ–ε curve.
+2. Load the beamline / station table (one row per frame).
+3. Choose which column is missing (stress or strain) and confirm units.
+4. Map → review overlay → export aligned table and plots.
+
+## Scientific boundary — what it is NOT
+
+- **Not** a constitutive material model, crystal plasticity solver, or FEM post-processor
+- **Not** a DIC / virtual-extensometer strain extractor (see [ezDIC](https://github.com/D-sudoasd/ezDIC) for image-based strain)
+- Output quality **tracks the reference curve**; garbage in → garbage out
+- Always verify **fraction vs percent** strain before publishing figures or tables
+
+## Tests
 
 ```powershell
 python -m unittest tests/test_stress_strain_mapper.py -v
 ```
 
-Limits: quality tracks the reference curve; not a constitutive model or DIC solver. Check fraction vs percent strain before publishing.
+## License
 
-MIT — [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
