@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="assets/readme/hero.svg" width="100%" alt="Stress-Strain Mapper: fill missing stress or strain from a reference curve.">
+  <img src="assets/readme/hero.svg" width="100%" alt="StrainLink: synchrotron in-situ tensile data mapping tool.">
 </p>
 
-# Stress–Strain Mapper
+# StrainLink｜同步辐射原位拉伸数据映射工具
 
-**Complete missing stress or strain for in-situ SXRD tensile tables using a reference σ–ε curve.**
+**Map missing stress or strain in in-situ SXRD tensile tables using a reference σ–ε curve.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3%2B%20(tkinter)-green.svg)](https://www.python.org/downloads/)
