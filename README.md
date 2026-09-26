@@ -56,7 +56,7 @@ Requires Python 3 with **tkinter** (standard on most Windows / macOS Python inst
 ## Scientific boundary — what it is NOT
 
 - **Not** a constitutive material model, crystal plasticity solver, or FEM post-processor
-- **Not** a DIC / virtual-extensometer strain extractor (see [ezDIC](https://github.com/D-sudoasd/ezDIC) for image-based strain)
+- **Not** a DIC / virtual-extensometer strain extractor (see [StrainTrace](https://github.com/D-sudoasd/StrainTrace), formerly ezDIC, for image-based strain)
 - Output quality **tracks the reference curve**; garbage in → garbage out
 - Always verify **fraction vs percent** strain before publishing figures or tables
 
