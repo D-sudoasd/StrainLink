@@ -1,52 +1,27 @@
-<p align="center">
-  <img src="assets/readme/hero.png" width="100%" alt="StrainLink — Map diffraction records to a reference stress–strain curve / 将衍射记录映射到参考应力–应变曲线. Conceptual illustration / 概念插图。">
-</p>
-
 # StrainLink
 
-**Map diffraction records to a reference stress–strain curve**
+**将逐帧衍射记录中的应力或应变，与完整参考应力–应变曲线对应起来。**
 
-**将衍射记录映射到参考应力–应变曲线**
+A Tk desktop tool for mapping frame-level stress or strain against a laboratory reference curve. It supports unit checks, overlay review, aligned tables, and plot export.
 
-[Overview / 项目概览](#overview--项目概览) · [Start / 开始使用](#start--开始使用) · [Reference / 详细说明](#reference--详细说明)
+[安装与启动](#install--quick-start) · [数据映射步骤](#usage) · [输入条件](#features) · [图像应变工具 StrainTrace](https://github.com/D-sudoasd/StrainTrace)
 
-## Overview / 项目概览
+[![MIT](https://img.shields.io/badge/License-MIT-455A64)](LICENSE)
 
-Use a reference mechanical curve to estimate missing stress or strain values. Inspect units, alignment and interpolation before exporting the linked records.
-
-利用参考力学曲线估计缺失的应力或应变值，检查单位、对齐方式与插值结果，再导出关联记录。
-
-- **Bidirectional mapping** — 支持由应变查询应力及由应力查询应变。
-- **Inspect interpolation** — 查看 PCHIP 或线性插值及可选平滑的影响。
-- **Table exchange** — 读取和导出常用 Excel 与 CSV 表格。
-
-## Start / 开始使用
-
-```powershell
-py -m pip install pandas numpy matplotlib scipy openpyxl
-py sxrd_stress_strain_mapper_gui_v3.py
+```mermaid
+flowchart TD
+  A[完整参考应力–应变曲线] --> C[核对列、单位与对应关系]
+  B[逐帧记录表] --> C
+  C --> D{逐帧记录中已有哪一列}
+  D -->|应变| E[插值得到应力]
+  D -->|应力| F[反向插值得到应变]
+  D -->|两列都有| G[检查对应关系]
+  E --> H[叠加检查并导出表格和图]
+  F --> H
+  G --> H
 ```
 
-Mapped values are estimates from the chosen reference curve. Non-monotonic curves require care when selecting an inverse branch.
-
-映射值是基于所选参考曲线的估计；非单调曲线的反向映射需要明确所选分支。
-
-*Cover: AI-generated conceptual illustration. 封面为 AI 生成的概念插图。*
-
-## Reference / 详细说明
-
-# StrainLink｜同步辐射原位拉伸数据映射工具
-
-**Map missing stress or strain in in-situ SXRD tensile tables using a reference σ–ε curve.**
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3%2B%20(tkinter)-green.svg)](https://www.python.org/downloads/)
-
-Desktop **Tk** GUI (v3). Each table row is one spectrum / frame / acquisition. A complete lab reference stress–strain curve fills the missing column, converts units, checks alignment, and exports publication-ready plots.
-
-<p align="center">
-  <img src="assets/readme/section-01-map.svg" width="100%" alt="01 Map: reference curve fills station gaps.">
-</p>
+**每行代表一次谱线、帧或采集。** 对应结果是参考曲线的插值估计，不是从衍射峰重新测量应力或应变。使用前必须核对应变的小数/百分数及应力单位；反向映射还需确认所选参考区段的对应关系。
 
 ## Features
 
