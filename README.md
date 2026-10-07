@@ -21,6 +21,18 @@ A Tk desktop tool for mapping frame-level stress or strain against a laboratory 
 
 **每行代表一次谱线、帧或采集。** 对应结果是参考曲线的插值估计，不是从衍射峰重新测量应力或应变。使用前必须核对应变的小数/百分数及应力单位；反向映射还需确认所选参考区段的对应关系。
 
+## 原理示意 / Principle schematic
+
+<p align="center">
+  <img src="assets/readme/principle.png" width="100%" alt="Reference-curve interpolation maps frame strain to estimated stress — conceptual schematic / 概念示意图">
+</p>
+
+*逐帧已知应变在参考应力–应变曲线上对应插值应力；输出是参考曲线估计，使用前核对单位与参考区段。概念示意，非实验数据。*
+
+*Known frame strain maps to interpolated stress on a reference stress–strain curve; estimates depend on units and the selected reference segment. Conceptual schematic, not experimental data.*
+
+[查看完整示意图 / View full-size schematic](assets/readme/principle.png)
+
 ## Features
 
 | Station has… | Mapper does… |
